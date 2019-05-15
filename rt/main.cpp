@@ -1,3 +1,23 @@
+
+// Add /openmp to VS compiler to run in parallel!
+
+// Baseline:
+// 93 seconds to render random_scene with 100 samples and 20 bounces at 400 x 200
+
+// OpenMP with 4 core i-Core 7
+// 22 seconds to render random_scene with 100 samples and 20 bounces at 400 x 200
+
+// Cuda
+
+// RTX
+
+#ifdef _OPENMP 
+#include <omp.h>
+#endif
+
+#include <chrono>
+#include <ctime> 
+
 #include "dostream.h"
 #include "sdlhelpers.h"
 #include "memorybuffer.h"
@@ -9,51 +29,81 @@
 #include "camera.h"
 #include "rnd.h"
 
-
 static dostream dbg;
 
 
-RGBColor color(const ray & r, const hitable & world, int depth )
+RGBColor color(ray & r, const hitable & world, int depth )
 {
 	hit_record rec;
-	if ( world.hit(r, 0.0001f, 10000.0f, rec))	
+	RGBColor attenuated(1.0f, 1.0f, 1.0f);
+	ray scattered;
+	for (int i = 0; i < depth; i++)
 	{
-		ray scattered;
-		RGBColor attenuated;
-		if (depth >= 0 && rec.mat_ptr->scatter(r, rec, attenuated, scattered))
+		if (world.hit(r, 0.0001f, 10000.0f, rec))
 		{
-			return attenuated * color(scattered, world, depth - 1);
+			ray scattered;
+			RGBColor a;
+			if (rec.mat_ptr->scatter(r, rec, a, scattered))
+			{
+				attenuated *= a; // color(scattered, world, depth - 1);
+				r = scattered;
+			}
+			else
+			{
+				return RGBColor();
+			}
 		}
 		else
 		{
-			return RGBColor();
+			vec3 dir = unit_vector(r.direction());
+			float t = 0.5f * (dir.y() + 1.0f);
+			RGBColor background = (1.0f - t) * RGBColor(1.0f, 1.0f, 1.0f) + t * RGBColor(0.5f, 0.7f, 1.0f);
+			return background * attenuated;
 		}
 	}
 
-	vec3 dir = unit_vector(r.direction());
-	float t = 0.5f * (dir.y() + 1.0f);
-	return (1.0f - t) * RGBColor(1.0f, 1.0f, 1.0f) + t * RGBColor(0.5f, 0.7f, 1.0f);
+	return RGBColor();
 }
 
-void draw_line(RGB8MemoryBuffer & mb, camera & cam, const hitable & world, Rnd & rnd, int j, int samples = 100, int max_bounces = 50)
-{		
-	// for (int j = 0; j < mb.height() ; j++)
+int draw_line(RGB8MemoryBuffer & mb, camera & cam, const hitable & world, Rnd & rnd, const int j_start, const int samples = 100, const int max_bounces = 50)
+{	
+	int lines_done = 0;
+#ifdef _OPENMP
+	#pragma omp parallel default(none) shared(mb, cam, rnd, lines_done)
+#endif
 	{
-		for (int i = 0; i < mb.width(); i++)
-		{
-			RGBColor col;
-			for (int sample = 0; sample < samples; sample++)
-			{
-				float u = float(i + rnd.random() ) / float(mb.width());
-				float v = float(j + rnd.random() ) / float(mb.height());
+#ifdef _OPENMP
+		int threads = omp_get_num_threads();		 
+#else
+		int threads = 1;
+#endif
+		int max_j = j_start + threads < mb.height() ? j_start + threads : mb.height();
 
-				ray r = cam.get_ray(u, v);
-				col += color(r, world, max_bounces);
+#ifdef _OPENMP
+		#pragma omp for schedule(dynamic) reduction(+:lines_done)
+#endif
+		for (int j = j_start; j < max_j; j++)
+		{
+			lines_done++;
+			for (int i = 0; i < mb.width(); i++)
+			{
+				RGBColor col;
+				for (int sample = 0; sample < samples; sample++)
+				{
+					float u = float(i + rnd.random()) / float(mb.width());
+					float v = float(j + rnd.random()) / float(mb.height());
+
+					ray r = cam.get_ray(u, v);
+					col += color(r, world, max_bounces);
+				}
+				col *= (1.0f / samples);
+				mb.put(i, j, RGB8Color(uint8_t(sqrt(col.r) * 255.99), uint8_t(sqrt(col.g) * 255.99), uint8_t(sqrt(col.b) * 255.99)));
 			}
-			col *= (1.0f / samples);
-			mb.put(i,j, RGB8Color(uint8_t(sqrt(col.r) * 255.99), uint8_t(sqrt(col.g) * 255.99), uint8_t(sqrt(col.b) * 255.99)));
 		}
+		
 	}
+
+	return j_start + lines_done;	
 }
 
 
@@ -145,7 +195,7 @@ int runMain()
 		return -4;	
 	}
 
-
+	auto start = std::chrono::system_clock::now();
 
 	int j = 0;
 	SDL_Event e;
@@ -166,11 +216,14 @@ int runMain()
 
 		if (j < mb.height())
 		{
-			draw_line(mb, cam, *(world), rnd, j, 100, 20);
-			j++;
+			j = draw_line(mb, cam, *(world), rnd, j, 100, 20);
+			// dbg << "Finished lines " << j << std::endl;		
 		}
 		if (j == mb.height())
-		{
+		{		
+			auto end = std::chrono::system_clock::now();
+			std::chrono::duration<double> elapsed_seconds = end - start;
+			dbg << "Rendering took " << (elapsed_seconds.count() ) << " seconds" << std::endl;
 			mb_save(mb, "test.png");
 			j++;
 		}
