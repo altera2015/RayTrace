@@ -152,7 +152,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="material.cpp" />
     <ClCompile Include="memorybuffer.cpp" />
+    <ClCompile Include="scenes.cpp" />
     <ClCompile Include="sdlhelpers.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -164,6 +166,7 @@
     <ClInclude Include="material.h" />
     <ClInclude Include="ray.h" />
     <ClInclude Include="rnd.h" />
+    <ClInclude Include="scenes.h" />
     <ClInclude Include="sdlhelpers.h" />
     <ClInclude Include="memorybuffer.h" />
     <ClInclude Include="sphere.h" />
