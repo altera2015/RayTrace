@@ -116,7 +116,7 @@ int runMain()
 	SDL_WindowPtr win;
 	SDL_RendederPtr ren;
 
-	RGB8MemoryBuffer mb(width, height, RGB8Color(0xff, 0, 0));
+	RGB8MemoryBuffer mb(width, height, RGB8Color(0xff, 0xff, 0xff));
 
 	if (!SDLH_SetupWindow(100, 100, width, height, win, ren))
 	{

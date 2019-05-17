@@ -18,28 +18,28 @@ __global__ void rnd_init(size_t _pixels, int _width, curandState * _state)
 	curand_init(1984, pixel_index, 0, &_state[pixel_index]);
 }
 
-__host__ Rnd::Rnd(size_t pixels, int width) : _pixels(pixels), _width(width), _state(nullptr)
+__host__ Rnd::Rnd(const Rnd & other) : _owner(false)
+{
+	_state = other._state;
+	_pixels = other._pixels;
+	_width = other._width;
+}
+
+__host__ Rnd::Rnd(dim3 blocks, dim3 threads, size_t pixels, int width) : _pixels(pixels), _width(width), _state(nullptr), _owner(true)
 {	
-}
-
-__host__ void Rnd::init(dim3 blocks, dim3 threads)
-{
 	cudaMalloc(&_state, _pixels * sizeof(curandState));
-	rnd_init<<<blocks, threads>>> (_pixels, _width, _state);
+	rnd_init <<<blocks, threads>>> (_pixels, _width, _state);
 }
 
-
-
-__host__ void Rnd::dealloc()
+__host__ Rnd::~Rnd()
 {
-	if (_state != nullptr)
+	if (_owner)
 	{
 		cudaFree(&_state);
 	}
 }
 
-
-__device__ float Rnd::random() 
+__device__ float Rnd::random()
 {
 	int i = threadIdx.x + blockIdx.x * blockDim.x;
 	int j = threadIdx.y + blockIdx.y * blockDim.y;

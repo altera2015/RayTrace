@@ -6,7 +6,11 @@ static dostream dbg;
 
 SDL_SurfacePtr SDLH_SurfaceFromMemoryBuffer(RGB8MemoryBuffer & mb)
 {
-	return SDL_SurfacePtr(SDL_CreateRGBSurfaceFrom(mb.raw(), mb.width(), mb.height(), mb.bytesPerPixel() * 8, mb.width() * mb.bytesPerPixel(), 0, 0, 0, 0) );
+	uint32_t rmask = 0x000000ff;
+	uint32_t gmask = 0x0000ff00;
+	uint32_t bmask = 0x00ff0000;
+
+	return SDL_SurfacePtr(SDL_CreateRGBSurfaceFrom(mb.raw(), mb.width(), mb.height(), mb.bytesPerPixel() * 8, mb.width() * mb.bytesPerPixel(), rmask, gmask, bmask, 0) );
 }
 
 
