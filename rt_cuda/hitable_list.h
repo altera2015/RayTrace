@@ -51,6 +51,13 @@ public:
 		}
 		return hit_anything;
 	}
+
+	int count() const {
+		return _count;
+	}
+	int max() const {
+		return _max;
+	}
 };
 
 

@@ -5,9 +5,10 @@
 
 template<typename T>
 struct TColor {
-	T b;
-	T g;
 	T r;
+	T g;
+	T b;
+
 	TColor(T pr = T(0), T pg = T(0), T pb = T(0)) : r(pr), g(pg), b(pb) {
 	}
 	

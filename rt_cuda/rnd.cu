@@ -5,30 +5,33 @@
 #include <curand_kernel.h>
 
 
-__global__ void rnd_init(size_t _pixels, int _width, curandState * _state)
+__global__ void rnd_init(size_t _count, curandState * _state)
 {
-	int i = threadIdx.x + blockIdx.x * blockDim.x;
-	int j = threadIdx.y + blockIdx.y * blockDim.y;
-	size_t pixel_index = j * _width + i;
-	if (pixel_index >= _pixels)
+	// int i = threadIdx.x + blockIdx.x * blockDim.x;
+	// int j = threadIdx.y + blockIdx.y * blockDim.y;
+	// size_t pixel_index = j * _width + i;
+	// size_t pixel_index = threadIdx.x;
+	int index = threadIdx.x + (threadIdx.y) * blockDim.x + (blockIdx.x * blockDim.x * blockDim.y);
+	if (index >= _count)
 	{
 		return;
 	}
 	//Each thread gets same seed, a different sequence number, no offset
-	curand_init(1984, pixel_index, 0, &_state[pixel_index]);
+	curand_init(1984, index, 0, &_state[index]);
 }
 
 __host__ Rnd::Rnd(const Rnd & other) : _owner(false)
 {
 	_state = other._state;
-	_pixels = other._pixels;
-	_width = other._width;
+	_count = other._count;	
 }
 
-__host__ Rnd::Rnd(dim3 blocks, dim3 threads, size_t pixels, int width) : _pixels(pixels), _width(width), _state(nullptr), _owner(true)
-{	
-	cudaMalloc(&_state, _pixels * sizeof(curandState));
-	rnd_init <<<blocks, threads>>> (_pixels, _width, _state);
+__host__ Rnd::Rnd(dim3 blocks, dim3 threads) : _state(nullptr), _owner(true)
+{		
+	_count = blocks.x * blocks.y * threads.x * threads.y;
+	cudaMalloc(&_state, _count * sizeof(curandState));
+	rnd_init <<<blocks, threads>>> (_count, _state);
+	// rnd_init << <blocks, ixels >> > (_pixels, _width, _state);
 }
 
 __host__ Rnd::~Rnd()
@@ -41,14 +44,20 @@ __host__ Rnd::~Rnd()
 
 __device__ float Rnd::random()
 {
-	int i = threadIdx.x + blockIdx.x * blockDim.x;
+	/* int i = threadIdx.x + blockIdx.x * blockDim.x;
 	int j = threadIdx.y + blockIdx.y * blockDim.y;
 	int pixel_index = j * _width + i;
 	if (pixel_index >= _pixels)
 	{
 		return 0.0f;
+	}*/
+
+	int index = threadIdx.x + (threadIdx.y) * blockDim.x + (blockIdx.x * blockDim.x * blockDim.y);
+	if (index >= _count)
+	{
+		return 0;
 	}
-	return curand_uniform(&_state[pixel_index]);
+	return curand_uniform(&_state[index]);
 }
 
 __device__ vec3 Rnd::random_in_unit_disk()

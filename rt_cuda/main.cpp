@@ -7,8 +7,12 @@
 // 22 seconds to render random_scene with 100 samples and 20 bounces at 400 x 200
 
 // Cuda
+// 3.5 seconds
 
 // RTX
+
+#include "ray.h"
+#include "cuda_render.h"
 
 #include <chrono>
 #include <ctime> 
@@ -17,97 +21,8 @@
 #include "../rt/sdlhelpers.h"
 #include "../rt/memorybuffer.h"
 
-#include "ray.h"
-// #include "scenes.h"
-// #include "camera.h"
-// #include "rnd.h"
-
-// #include "sphere.h"
-// #include "material.h"
-// #include "hitable_list.h"
-
-
 static dostream dbg;
 
-/*
-
-RGBColor color(ray & r, const hitable & world, int depth)
-{
-	hit_record rec;
-	RGBColor attenuated(1.0f, 1.0f, 1.0f);
-	ray scattered;
-	for (int i = 0; i < depth; i++)
-	{
-		if (world.hit(r, 0.0001f, 10000.0f, rec))
-		{
-			ray scattered;
-			RGBColor a;
-			if (rec.mat_ptr->scatter(r, rec, a, scattered))
-			{
-				attenuated *= a;
-				r = scattered;
-			}
-			else
-			{
-				return RGBColor();
-			}
-		}
-		else
-		{
-			vec3 dir = unit_vector(r.direction());
-			float t = 0.5f * (dir.y() + 1.0f);
-			RGBColor background = (1.0f - t) * RGBColor(1.0f, 1.0f, 1.0f) + t * RGBColor(0.5f, 0.7f, 1.0f);
-			return background * attenuated;
-		}
-	}
-
-	return RGBColor();
-}
-
-int draw_lines(RGB8MemoryBuffer & mb, camera & cam, const hitable & world, Rnd & rnd, const int j_start, const int samples = 100, const int max_bounces = 50)
-{
-	int lines_done = 0;
-#ifdef _OPENMP
-#pragma omp parallel default(none) shared(mb, cam, rnd, lines_done)
-#endif
-	{
-#ifdef _OPENMP
-		int threads = omp_get_num_threads();
-#else
-		int threads = 1;
-#endif
-		int max_j = j_start + threads < mb.height() ? j_start + threads : mb.height();
-
-#ifdef _OPENMP
-#pragma omp for schedule(dynamic) reduction(+:lines_done)
-#endif
-		for (int j = j_start; j < max_j; j++)
-		{
-			lines_done++;
-			for (int i = 0; i < mb.width(); i++)
-			{
-				RGBColor col;
-				for (int sample = 0; sample < samples; sample++)
-				{
-					float u = float(i + rnd.random()) / float(mb.width());
-					float v = float(j + rnd.random()) / float(mb.height());
-
-					ray r = cam.get_ray(u, v);
-					col += color(r, world, max_bounces);
-				}
-				col *= (1.0f / samples);
-				mb.put(i, j, RGB8Color(uint8_t(sqrt(col.r) * 255.99), uint8_t(sqrt(col.g) * 255.99), uint8_t(sqrt(col.b) * 255.99)));
-			}
-		}
-
-	}
-
-	return j_start + lines_done;
-}
-
-*/
-
-bool render_cuda(RGB8MemoryBuffer & mb);
 int runMain()
 {
 	const int width = 400;
@@ -116,7 +31,18 @@ int runMain()
 	SDL_WindowPtr win;
 	SDL_RendederPtr ren;
 
-	RGB8MemoryBuffer mb(width, height, RGB8Color(0xff, 0xff, 0xff));
+	RGB8MemoryBuffer mb(width, height, RGB8Color(0x00, 0xff, 0xff));
+	CudaRender r;
+	dbg << r.info() << std::endl;
+
+	vec3 look_from(13.0f, 2.0f, 3.0f);	
+	vec3 look_at(0.0f, 0.0f, 0.0f);
+	vec3 camera_up(0.0f, 1.0f, 0.0f);
+
+	camera cam(look_from, look_at, camera_up, 25, float(mb.width()) / float(mb.height()), 0.1f, (look_at - look_from).length());
+
+	int totalBlocks = 0;
+	totalBlocks = r.setup(&mb, &cam);
 
 	if (!SDLH_SetupWindow(100, 100, width, height, win, ren))
 	{
@@ -132,7 +58,8 @@ int runMain()
 
 	auto start = std::chrono::system_clock::now();
 
-	int j = 0;
+	int loop = 0;
+	int block = 0;
 	SDL_Event e;
 	bool quit = false;
 	while (!quit) {
@@ -149,15 +76,25 @@ int runMain()
 			}
 		}
 
-		if (j == 0 )
+		std::chrono::duration<double> totalComputeTime;
+		if (block < totalBlocks )
 		{
-			bool success = render_cuda(mb);
-			mb_save(mb, "test.png");			
-			j++;
-
+			auto step_start = std::chrono::system_clock::now();			
+			block = r.computeNext();			
 			auto end = std::chrono::system_clock::now();
-			std::chrono::duration<double> elapsed_seconds = end - start;
-			dbg << "Rendering took " << (elapsed_seconds.count()) << " seconds" << std::endl;
+			std::chrono::duration<double> elapsed_seconds = end - step_start;
+			totalComputeTime += elapsed_seconds;
+			dbg << "Step took " << (elapsed_seconds.count()) << " seconds" << std::endl;
+			r.syncBuffers();
+			if (block >= totalBlocks)
+			{				
+				dbg << "Cleanup called." << std::endl;
+				r.cleanup();
+				mb_save(mb, "test.png");
+				auto end = std::chrono::system_clock::now();				
+				dbg << "Rendering took " << (totalComputeTime.count()) << " seconds" << std::endl;
+
+			}
 		}		
 
 		SDL_RenderClear(ren.get());

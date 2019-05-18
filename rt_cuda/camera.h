@@ -23,11 +23,10 @@
 #define M_PI 3.14159265358979f
 #endif
 
-class camera {
-	Rnd _rnd;
+class camera {	
 public:
 
-	__device__ __host__ camera(vec3 lookfrom, vec3 lookat, vec3 vup, float vfov, float aspect, float aperture, float focus_dist, Rnd rnd) : _rnd(rnd) { // vfov is top to bottom in degrees
+	__device__ __host__ camera(vec3 lookfrom, vec3 lookat, vec3 vup, float vfov, float aspect, float aperture, float focus_dist)  { // vfov is top to bottom in degrees
 		lens_radius = aperture / 2.0f;
 		float theta = vfov * float(M_PI) / 180.0f;
 		float half_height = tan(theta / 2);
@@ -45,8 +44,8 @@ public:
 		vec3 offset(0.0f, 0.0f, 0.0f);
 		return ray(origin + offset, upper_right_corner + s*horizontal + t*vertical - origin - offset);
 	}
-	__device__ ray get_ray(float s, float t) {
-		vec3 rd = lens_radius*_rnd.random_in_unit_disk();
+	__device__ ray get_ray(float s, float t, Rnd &rnd){
+		vec3 rd = lens_radius*rnd.random_in_unit_disk();
 		vec3 offset = u * rd.x() + v * rd.y();
 		return ray(origin + offset, upper_right_corner + s*horizontal + t*vertical - origin - offset);
 	}

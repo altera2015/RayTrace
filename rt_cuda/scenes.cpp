@@ -30,9 +30,16 @@ hitable *random_scene() {
 	int i = 1;
 	for (int a = -11; a < 11; a++) {
 		for (int b = -11; b < 11; b++) {
+			if (hl->count() >= hl->max())
+			{
+				break;
+			}
 			float choose_mat = random();
 			vec3 center(a + 0.9f*random(), 0.2f, b + 0.9f*random());
 			if ((center - vec3(4.0f, 0.2f, 0.0f)).length() > 0.9f) {
+				
+				// hl->add(new sphere(center, 0.2f, new lambertian(RGBColor(random()*random(), random()*random(), random()*random()))));
+				
 				if (choose_mat < 0.8f) {  // diffuse
 					hl->add(new sphere(center, 0.2f, new lambertian(RGBColor(random()*random(), random()*random(), random()*random()))));
 				}

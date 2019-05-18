@@ -3,18 +3,30 @@
 
 #include <cuda_runtime.h>
 
+
 class Managed {
 public:
 	void *operator new(size_t len) {
 		void *ptr;
-		cudaMallocManaged(&ptr, len);
-		cudaDeviceSynchronize();
+		cudaError_t e = cudaMallocManaged(&ptr, len);
+		if (e) {
+			cudaDeviceReset();
+			exit(99);
+		}
+		e = cudaDeviceSynchronize();
+		if (e) {
+			cudaDeviceReset();
+			exit(99);
+		}
 		return ptr;
 	}
 
 	void operator delete(void *ptr) {
 		cudaDeviceSynchronize();
-		cudaFree(ptr);
+		cudaError_t e = cudaFree(ptr);
+		if (e) {
+			exit(99);
+		}
 	}
 };
 

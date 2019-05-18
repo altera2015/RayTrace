@@ -9,13 +9,12 @@
 class Rnd {
 
 	curandState * _state;
-	size_t _pixels;
-	int _width;
 	bool _owner;
+	int _count;	
 
 public:
 	__host__ Rnd(const Rnd & other);
-	__host__ Rnd(dim3 blocks, dim3 threads, size_t pixels, int width);
+	__host__ Rnd(dim3 blocks, dim3 threads);
 	__host__ ~Rnd();
 	
 
