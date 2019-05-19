@@ -9,7 +9,7 @@
 
 class hitable;
 
-class BlockCalc : Managed {
+class BlockCalc {
 
 	int _width;
 	int _height;
@@ -62,11 +62,12 @@ class CudaRender : public  IRender {
 	dim3 _threads;
 
 	Rnd * _rnd;
-	RGB8Color * _fbdev;
+	RGBColor * _fbdev;
 	int _currentBlock;
 	BlockCalc _blockCalculator;
+	int _samples;
 public:
-	CudaRender(int blocksizeX=32, int blockSizeY=32, int blocksPerCompute=25);
+	CudaRender(int blocksizeX=-1, int blocksizeY=-1, int blocksPerCompute=-1, int samples = 100);
 	virtual std::string info();
 	virtual int setup(RGB8MemoryBuffer * buffer, camera * cam);
 	virtual int computeNext();

@@ -36,7 +36,7 @@ int runMain()
 	dbg << r.info() << std::endl;
 
 	vec3 look_from(13.0f, 2.0f, 3.0f);	
-	vec3 look_at(0.0f, 0.0f, 0.0f);
+	vec3 look_at(0.0f, -0.0f, 0.0f);
 	vec3 camera_up(0.0f, 1.0f, 0.0f);
 
 	camera cam(look_from, look_at, camera_up, 25, float(mb.width()) / float(mb.height()), 0.1f, (look_at - look_from).length());
@@ -56,7 +56,7 @@ int runMain()
 		return -4;
 	}
 
-	auto start = std::chrono::system_clock::now();
+	
 
 	int loop = 0;
 	int block = 0;
@@ -76,8 +76,9 @@ int runMain()
 			}
 		}
 
+		auto start = std::chrono::system_clock::now();
 		std::chrono::duration<double> totalComputeTime;
-		if (block < totalBlocks )
+		while (block < totalBlocks )
 		{
 			auto step_start = std::chrono::system_clock::now();			
 			block = r.computeNext();			
@@ -87,12 +88,14 @@ int runMain()
 			dbg << "Step took " << (elapsed_seconds.count()) << " seconds" << std::endl;
 			r.syncBuffers();
 			if (block >= totalBlocks)
-			{				
+			{								
+				std::chrono::duration<double> elapsed_seconds = end - start;
 				dbg << "Cleanup called." << std::endl;
 				r.cleanup();
 				mb_save(mb, "test.png");
-				auto end = std::chrono::system_clock::now();				
-				dbg << "Rendering took " << (totalComputeTime.count()) << " seconds" << std::endl;
+				
+				
+				dbg << "Rendering took " << (elapsed_seconds.count()) << " seconds" << std::endl;
 
 			}
 		}		

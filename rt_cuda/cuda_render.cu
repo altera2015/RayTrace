@@ -58,7 +58,7 @@ __device__ RGBColor color(ray & r, const hitable & world, int depth, Rnd & rnd)
 		{
 			vec3 dir = unit_vector(r.direction());
 			float t = 0.5f * (dir.y() + 1.0f);
-			RGBColor background = (1.0f - t) * RGBColor(1.0f, 1.0f, 1.0f) + t * RGBColor(0.5f, 0.7f, 1.0f);
+			RGBColor background = (1.0f - t) * RGBColor(1.0f, 1.0f, 1.0f) + t * RGBColor(0.5f, 0.7f, 1.0f);			
 			return background * attenuated;
 		}
 	}
@@ -66,7 +66,9 @@ __device__ RGBColor color(ray & r, const hitable & world, int depth, Rnd & rnd)
 	return RGBColor();
 }
 
-__global__ void renderblock(RGB8Color *fb, int max_x, int max_y, int startBlock, int samples, int max_bounces, camera cam, Rnd rnd, hitable & world, BlockCalc bcalc)
+
+#define BAKED_LOOPS 10
+__global__ void renderblock(RGBColor *fb, int max_x, int max_y, int startBlock, int max_bounces, camera cam, Rnd rnd, hitable & world, BlockCalc bcalc)
 {
 	int block = startBlock + blockIdx.x;
 	int i=0, j=0;
@@ -83,24 +85,46 @@ __global__ void renderblock(RGB8Color *fb, int max_x, int max_y, int startBlock,
 	int pixel_index = j * max_x + i;
 
 	RGBColor col;
-	for (int sample = 0; sample < samples; sample++)
+	#pragma unroll
+	for (int sample = 0; sample < BAKED_LOOPS; sample++)
 	{
 		float u = float(i + rnd.random()) / float(max_x);
 		float v = float(j + rnd.random()) / float(max_y);
 
 		ray r = cam.get_ray(u, v, rnd);
 		col += color(r, world, max_bounces, rnd);
-	}
-	col *= (1.0f / samples);
-	fb[pixel_index] = RGB8Color(uint8_t(sqrt(col.r) * 255.99f), uint8_t(sqrt(col.g) * 255.99f), uint8_t(sqrt(col.b) * 255.99f));
+	}		
+
+	atomicAdd(&fb[pixel_index].r, col.r);
+	atomicAdd(&fb[pixel_index].g, col.g);
+	atomicAdd(&fb[pixel_index].b, col.b);
 }
 
 
-CudaRender::CudaRender(int blocksizeX, int blockSizeY, int blocksPerCompute) :	
+CudaRender::CudaRender(int blocksizeX, int blocksizeY, int blocksPerCompute, int samples) :	
 	_blocks(blocksPerCompute),
-	_threads(blocksizeX, blockSizeY)
+	_threads(blocksizeX, blocksizeY, 32),
+	_samples(samples)
 {	
-	_blockCalculator.setBlockSize(blocksizeX, blockSizeY);
+	int device;
+	checkCudaErrors(cudaGetDevice(&device));
+	
+	int maxThreadsPerBlock;
+	checkCudaErrors(cudaDeviceGetAttribute(&maxThreadsPerBlock, cudaDevAttrMaxThreadsPerBlock, device));
+
+	int multiProcessors;
+	checkCudaErrors(cudaDeviceGetAttribute(&multiProcessors, cudaDevAttrMultiProcessorCount, device));
+
+	if (blocksizeY < 0 || blocksizeX <0 || blocksPerCompute < 0 ) {
+		blocksPerCompute = multiProcessors;
+		blocksizeX = maxThreadsPerBlock / 32;
+		blocksizeY = 1;
+		_blocks = blocksPerCompute;
+		_threads = dim3(blocksizeX, blocksizeY, 32);		
+	}
+
+	dbg << "Using " << blocksizeX * 32 << " threads and " << blocksPerCompute << " computes." << std::endl;
+	_blockCalculator.setBlockSize(blocksizeX, blocksizeY);
 	_rnd = new Rnd(_blocks, _threads);
 }
 
@@ -112,8 +136,16 @@ int CudaRender::setup(RGB8MemoryBuffer * buffer, camera * cam)
 	_currentBlock = 0;		
 	_blockCalculator.setImage(buffer->width(), buffer->height());	
 	size_t pixelCount = buffer->length();
-	size_t byteSize = sizeof(RGB8Color) * pixelCount;
-	checkCudaErrors(cudaMalloc(&_fbdev, byteSize));
+	size_t byteSize = sizeof(RGBColor) * pixelCount;
+	checkCudaErrors(cudaMallocManaged(&_fbdev, byteSize));
+	for (int j = 0; j < _buffer->height(); j++)
+	{
+		for (int i = 0; i < _buffer->width(); i++)
+		{
+			int pixel_index = j * _buffer->width() + i;
+			_fbdev[pixel_index] = RGBColor(0.0f, 0.0f, 0.0f);
+		}
+	}
 	cudaDeviceSynchronize();
 	return _blockCalculator.blockSum();
 }
@@ -122,14 +154,23 @@ int CudaRender::computeNext()
 {
 	int i, j;
 	_blockCalculator.pixelOffset(_currentBlock, i, j);
+	unsigned int totalLoops = _samples / BAKED_LOOPS;
 
-	renderblock<<<_blocks, _threads >>>(_fbdev, _buffer->width(), _buffer->height(), _currentBlock,
-		100,
-		20,
-		*_cam,
-		*_rnd,
-		*_world,
-		_blockCalculator);
+	while (totalLoops > 0)
+	{
+		if (totalLoops < _threads.z)
+		{
+			_threads.z = totalLoops;
+		}
+		renderblock << <_blocks, _threads >> > (_fbdev, _buffer->width(), _buffer->height(), _currentBlock,
+			20,
+			*_cam,
+			*_rnd,
+			*_world,
+			_blockCalculator);
+		
+		totalLoops -= _threads.z;
+	}
 
 	cudaDeviceSynchronize();
 	_currentBlock += _blocks.x * _blocks.y;
@@ -140,10 +181,20 @@ int CudaRender::computeNext()
 bool CudaRender::syncBuffers()
 {	
 	size_t pixelCount = _buffer->length();
-	size_t byteSize = sizeof(RGB8Color) * pixelCount;
-	
+	RGB8Color * o = _buffer->raw();
+
+	for (int j = 0; j < _buffer->height(); j++)
+	{
+		for (int i = 0; i < _buffer->width(); i++)
+		{
+			int pixel_index = j * _buffer->width() + i;
+			RGBColor & col = _fbdev[pixel_index];
+			o[pixel_index] = RGB8Color(uint8_t(sqrt(col.r/100.0f) * 255.99f), uint8_t(sqrt(col.g/100.0f) * 255.99f), uint8_t(sqrt(col.b/100.0f) * 255.99f));
+		}
+	}
+
 	// probably should only copy the updated part of the image
-	cudaMemcpy(_buffer->raw(), _fbdev, byteSize, cudaMemcpyDeviceToHost);
+	// cudaMemcpy(_buffer->raw(), _fbdev, byteSize, cudaMemcpyDeviceToHost);
 	return true;
 }
 

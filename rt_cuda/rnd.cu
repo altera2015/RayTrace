@@ -7,11 +7,7 @@
 
 __global__ void rnd_init(size_t _count, curandState * _state)
 {
-	// int i = threadIdx.x + blockIdx.x * blockDim.x;
-	// int j = threadIdx.y + blockIdx.y * blockDim.y;
-	// size_t pixel_index = j * _width + i;
-	// size_t pixel_index = threadIdx.x;
-	int index = threadIdx.x + (threadIdx.y) * blockDim.x + (blockIdx.x * blockDim.x * blockDim.y);
+	int index = threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y + (blockIdx.x * blockDim.x * blockDim.y * blockDim.z);
 	if (index >= _count)
 	{
 		return;
@@ -28,10 +24,9 @@ __host__ Rnd::Rnd(const Rnd & other) : _owner(false)
 
 __host__ Rnd::Rnd(dim3 blocks, dim3 threads) : _state(nullptr), _owner(true)
 {		
-	_count = blocks.x * blocks.y * threads.x * threads.y;
+	_count = blocks.x * blocks.y * threads.x * threads.y * threads.z;
 	cudaMalloc(&_state, _count * sizeof(curandState));
 	rnd_init <<<blocks, threads>>> (_count, _state);
-	// rnd_init << <blocks, ixels >> > (_pixels, _width, _state);
 }
 
 __host__ Rnd::~Rnd()
@@ -44,15 +39,7 @@ __host__ Rnd::~Rnd()
 
 __device__ float Rnd::random()
 {
-	/* int i = threadIdx.x + blockIdx.x * blockDim.x;
-	int j = threadIdx.y + blockIdx.y * blockDim.y;
-	int pixel_index = j * _width + i;
-	if (pixel_index >= _pixels)
-	{
-		return 0.0f;
-	}*/
-
-	int index = threadIdx.x + (threadIdx.y) * blockDim.x + (blockIdx.x * blockDim.x * blockDim.y);
+	int index = threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y + (blockIdx.x * blockDim.x * blockDim.y * blockDim.z);
 	if (index >= _count)
 	{
 		return 0;
