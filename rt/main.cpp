@@ -6,10 +6,14 @@
 
 // OpenMP with 4 core i-Core 7
 // 22 seconds to render random_scene with 100 samples and 20 bounces at 400 x 200
+// 39 on wp.
 
 // Cuda
 
 // RTX
+#include <stdint.h>
+
+uint64_t hit_count = 0;
 
 #ifdef _OPENMP 
 #include <omp.h>
@@ -33,6 +37,7 @@
 
 
 static dostream dbg;
+
 
 
 RGBColor color(ray & r, const hitable & world, int depth )
@@ -172,7 +177,7 @@ int runMain()
 		{		
 			auto end = std::chrono::system_clock::now();
 			std::chrono::duration<double> elapsed_seconds = end - start;
-			dbg << "Rendering took " << (elapsed_seconds.count() ) << " seconds" << std::endl;
+			dbg << "Rendering took " << (elapsed_seconds.count() ) << " seconds and had " << hit_count << " hit calculations" << std::endl;
 			mb_save(mb, "test.png");
 			j++;
 		}

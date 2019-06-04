@@ -104,7 +104,9 @@ __global__ void renderblock(RGBColor *fb, int max_x, int max_y, int startBlock, 
 CudaRender::CudaRender(int blocksizeX, int blocksizeY, int blocksPerCompute, int samples) :	
 	_blocks(blocksPerCompute),
 	_threads(blocksizeX, blocksizeY, 32),
-	_samples(samples)
+	_samples(samples),
+	_dev(nullptr),
+	_fbdev(nullptr)
 {	
 	int device;
 	checkCudaErrors(cudaGetDevice(&device));
@@ -137,15 +139,20 @@ int CudaRender::setup(RGB8MemoryBuffer * buffer, camera * cam)
 	_blockCalculator.setImage(buffer->width(), buffer->height());	
 	size_t pixelCount = buffer->length();
 	size_t byteSize = sizeof(RGBColor) * pixelCount;
-	checkCudaErrors(cudaMallocManaged(&_fbdev, byteSize));
+	
+	_dev = new RGBColor[pixelCount];
+	checkCudaErrors(cudaMalloc(&_fbdev, byteSize));
+
 	for (int j = 0; j < _buffer->height(); j++)
 	{
 		for (int i = 0; i < _buffer->width(); i++)
 		{
 			int pixel_index = j * _buffer->width() + i;
-			_fbdev[pixel_index] = RGBColor(0.0f, 0.0f, 0.0f);
+			_dev[pixel_index] = RGBColor(0.0f, 0.0f, 0.0f);
 		}
 	}
+	cudaMemcpy(_fbdev, _dev, byteSize, cudaMemcpyHostToDevice);
+
 	cudaDeviceSynchronize();
 	return _blockCalculator.blockSum();
 }
@@ -180,7 +187,16 @@ int CudaRender::computeNext()
 
 bool CudaRender::syncBuffers()
 {	
+
+	
+
+
 	size_t pixelCount = _buffer->length();
+	size_t byteSize = sizeof(RGBColor) * pixelCount;
+
+
+	cudaMemcpy(_dev, _fbdev, byteSize, cudaMemcpyDeviceToHost);
+
 	RGB8Color * o = _buffer->raw();
 
 	for (int j = 0; j < _buffer->height(); j++)
@@ -188,7 +204,7 @@ bool CudaRender::syncBuffers()
 		for (int i = 0; i < _buffer->width(); i++)
 		{
 			int pixel_index = j * _buffer->width() + i;
-			RGBColor & col = _fbdev[pixel_index];
+			RGBColor & col = _dev[pixel_index];
 			o[pixel_index] = RGB8Color(uint8_t(sqrt(col.r/100.0f) * 255.99f), uint8_t(sqrt(col.g/100.0f) * 255.99f), uint8_t(sqrt(col.b/100.0f) * 255.99f));
 		}
 	}
@@ -209,7 +225,8 @@ bool CudaRender::cleanup()
 	{
 		cudaFree(_fbdev);
 	}
-	_fbdev = nullptr;
+	_fbdev = nullptr;	
+	delete _dev;
 	return true;
 }
 

@@ -63,11 +63,12 @@ class CudaRender : public  IRender {
 
 	Rnd * _rnd;
 	RGBColor * _fbdev;
+	RGBColor * _dev;
 	int _currentBlock;
 	BlockCalc _blockCalculator;
 	int _samples;
 public:
-	CudaRender(int blocksizeX=-1, int blocksizeY=-1, int blocksPerCompute=-1, int samples = 100);
+	CudaRender(int blocksizeX=-1, int blocksizeY=-1, int blocksPerCompute=-1, int samples = 32*3);
 	virtual std::string info();
 	virtual int setup(RGB8MemoryBuffer * buffer, camera * cam);
 	virtual int computeNext();

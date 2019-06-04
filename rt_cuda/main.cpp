@@ -46,6 +46,7 @@ int runMain()
 
 	if (!SDLH_SetupWindow(100, 100, width, height, win, ren))
 	{
+		dbg << "SDLH_SetupWindow Error: " << SDL_GetError() << std::endl;
 		return -1;
 	}
 
@@ -85,10 +86,11 @@ int runMain()
 			auto end = std::chrono::system_clock::now();
 			std::chrono::duration<double> elapsed_seconds = end - step_start;
 			totalComputeTime += elapsed_seconds;
-			dbg << "Step took " << (elapsed_seconds.count()) << " seconds" << std::endl;
-			r.syncBuffers();
+			dbg << "Step took " << (elapsed_seconds.count()) << " seconds, block #=" << block << " of " << totalBlocks << std::endl;
+			//r.syncBuffers();
 			if (block >= totalBlocks)
-			{								
+			{				
+				r.syncBuffers();
 				std::chrono::duration<double> elapsed_seconds = end - start;
 				dbg << "Cleanup called." << std::endl;
 				r.cleanup();

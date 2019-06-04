@@ -1,3 +1,4 @@
+
 #include "scenes.h"
 
 
@@ -6,6 +7,7 @@
 #include "rnd.h"
 #include "sphere.h"
 #include "hitable_list.h"
+#include "bhv.h"
 
 hitable *random_scene(Rnd &rnd) {
 
@@ -38,8 +40,8 @@ hitable *random_scene(Rnd &rnd) {
 	hl->add(new sphere(vec3(-4.0f, 1.0f, 0.0f), 1.0f, MaterialSharedPtr(new lambertian(RGBColor(0.4f, 0.2f, 0.1f), rnd))));
 	hl->add(new sphere(vec3(4.0f, 1.0f, 0.0f), 1.0f, MaterialSharedPtr(new metal(RGBColor(0.7f, 0.6f, 0.5f), 0.0f, rnd))));
 
-
-	return hl;
+	// return hl;
+	return new bvh_node(hl);
 }
 
 hitable * buildWorld(Rnd & rnd) {
